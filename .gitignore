@@ -1,0 +1,27 @@
+node_modules/
+.next/
+out/
+.DS_Store
+*.tsbuildinfo
+.env*.local
+.vercel
+
+# Generated at install time from node_modules — never edited by hand
+public/models/
+public/tfjs-wasm/
+public/vendor/
+
+__pycache__/
+*.pyc
+
+# The kitchen's working parts: a cloned toolkit, ~1 GB of model weights, and
+# selftest output. None of it belongs in git, and the SATB checkpoint in
+# particular has no stated licence, so it stays on the machine that fetched it.
+kitchen/vendor/
+kitchen/models/
+kitchen/_selftest/
+kitchen/requirements-inference.txt
+
+# Written by `next dev` on every run
+AGENTS.md
+CLAUDE.md

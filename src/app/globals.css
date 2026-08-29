@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #07070a;
+  --bg-elev: #0f0f14;
+  --fg: #ededed;
+  --fg-muted: #8a8a93;
+  --accent: #c7f25b;
+  --accent-soft: rgba(199, 242, 91, 0.12);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* one colour per voice group, used by the mixer, waveform and part chips */
+  --v-s: #f2a5c4;
+  --v-a: #c7f25b;
+  --v-t: #6fd7f2;
+  --v-b: #f5b45c;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-line: var(--border);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--accent);
+  color: #000;
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+  background-color: rgba(20, 20, 28, 0.55);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+.glow-ring {
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    0 0 32px -8px var(--accent-soft),
+    0 24px 60px -30px rgba(0, 0, 0, 0.7);
+}
+
+/* range inputs are the main control surface here, so they get real styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--track-color, var(--accent));
+  border: 2px solid #07070a;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+input[type="range"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #07070a;
+  border-radius: 999px;
+  background: var(--track-color, var(--accent));
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.pulsing {
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

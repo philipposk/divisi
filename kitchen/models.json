@@ -1,0 +1,31 @@
+{
+  "vocals": {
+    "purpose": "Pull the singing away from piano/organ/band, so the SATB model gets what it expects.",
+    "model_type": "mel_band_roformer",
+    "config": {
+      "path": "configs/viperx/model_mel_band_roformer_ep_3005_sdr_11.4360.yaml",
+      "from": "msst-repo"
+    },
+    "checkpoint": {
+      "file": "model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt",
+      "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt"
+    },
+    "extract_instrumental": true,
+    "stems": ["vocals", "instrumental"]
+  },
+  "satb": {
+    "purpose": "Split a four-part vocal recording into soprano / alto / tenor / bass.",
+    "model_type": "scnet_masked",
+    "config": {
+      "file": "config_choirsep_scnet_small.yaml",
+      "hf_repo": "rbustos89/scnetmskedchoir"
+    },
+    "checkpoint": {
+      "file": "model_scnet_masked_ep_14_sdr_6.9052.ckpt",
+      "hf_repo": "rbustos89/scnetmskedchoir"
+    },
+    "extract_instrumental": false,
+    "stems": ["soprano", "alto", "tenor", "bass"],
+    "note": "Community checkpoint with no stated licence. Kept local, never redistributed."
+  }
+}
