@@ -416,6 +416,8 @@ export default function Player({ project, onClose }: Props) {
           `treat it as a sketch, not a score.`
       );
     } catch (e) {
+      // the message alone is rarely enough to debug a tfjs failure
+      console.error("[divisi] part finding failed", e);
       setFindingNote(`Could not work out the parts: ${e instanceof Error ? e.message : e}`);
     } finally {
       setFinding({ active: false, message: "", percent: 0 });

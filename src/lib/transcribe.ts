@@ -27,16 +27,28 @@ const MAX_HZ = 1046.5;
 let backendReady: Promise<void> | null = null;
 let model: BasicPitch | null = null;
 
+/**
+ * Pick a backend that can actually run this model.
+ *
+ * WASM is tried last on purpose: tfjs 3.x's WASM backend hands Basic Pitch's
+ * graph a tensor with no dtype and dies with "Unknown dtype undefined", so it
+ * is only a fallback for browsers with no WebGL at all.
+ */
 async function ensureBackend() {
-  if (!backendReady) {
-    backendReady = (async () => {
-      // The WebGL backend crashes with a Metal shader error on modern iPhones
-      // and iPads, so pin WASM everywhere rather than debugging per-device.
-      setWasmPaths("/tfjs-wasm/");
-      await tf.setBackend("wasm");
-      await tf.ready();
-    })();
-  }
+  backendReady ??= (async () => {
+    setWasmPaths("/tfjs-wasm/");
+    for (const backend of ["webgl", "cpu", "wasm"] as const) {
+      try {
+        if (await tf.setBackend(backend)) {
+          await tf.ready();
+          return;
+        }
+      } catch {
+        // try the next one
+      }
+    }
+    throw new Error("No usable TensorFlow backend in this browser.");
+  })();
   return backendReady;
 }
 
