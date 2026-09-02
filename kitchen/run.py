@@ -168,8 +168,13 @@ def main() -> int:
         print("--parts needs at least one of S A T B", file=sys.stderr)
         return 2
 
-    files = [p for p in args.inputs if p.is_file()]
-    missing = [p for p in args.inputs if not p.is_file()]
+    # the separation toolkit runs with its own working directory, so every path
+    # handed to it has to be absolute or it quietly finds nothing
+    args.out = args.out.expanduser().resolve()
+    inputs = [p.expanduser().resolve() for p in args.inputs]
+
+    files = [p for p in inputs if p.is_file()]
+    missing = [p for p in inputs if not p.is_file()]
     for p in missing:
         print(f"skipping {p}: not a file", file=sys.stderr)
     if not files:

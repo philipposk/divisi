@@ -77,10 +77,10 @@ def run_model(key: str, source: Path, out_dir: Path, force_cpu: bool = False) ->
     checkpoint = _find_checkpoint(spec["checkpoint"], model_dir)
 
     # inference.py works on folders, so give it one containing only our file
-    stage = out_dir / f"_{key}_in"
+    stage = (out_dir / f"_{key}_in").resolve()
     stage.mkdir(parents=True, exist_ok=True)
     shutil.copy(source, stage / source.name)
-    store = out_dir / f"_{key}_out"
+    store = (out_dir / f"_{key}_out").resolve()
     store.mkdir(parents=True, exist_ok=True)
 
     cmd = [

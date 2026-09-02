@@ -1,0 +1,9 @@
+# The kitchen never ships — it is a local Mac pipeline, and its vendor/ and
+# models/ folders are well over a gigabyte of checkpoints. Uploading them makes
+# a deploy take hours.
+kitchen/
+docs/
+.claude/
+node_modules/
+.next/
+out/
