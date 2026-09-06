@@ -80,17 +80,6 @@ it.
 - Homophonic writing — hymns, chorales, anthems — where the parts move together.
 - Anything where the bass is what you needed.
 
-## The browser "find the parts" button
-
-Different, weaker path, for when you have no kitchen folder. The browser
-transcribes the recording with Basic Pitch, guesses which section sang each
-note, and plays the result back as a synthesised tone rather than real voices.
-
-Two error sources stack: the transcriber mishears notes, then the assignment
-puts some of them in the wrong section. Useful for "where does my entry sit?".
-Not useful as a source of truth. The percentage it reports afterwards is how
-confidently notes were assigned, not how correct they are.
-
 ## Making it better
 
 In rough order of payoff:
@@ -100,3 +89,9 @@ In rough order of payoff:
 2. **Use the score.** MusicXML or MIDI gives exact parts; symbolic voice
    separation is a solved problem at 0.96–0.99 F1. Not wired up yet.
 3. **Feed it a cleaner recording.** Closer mic, less reverb, balanced sections.
+
+Divisi used to try transcribing in the browser and synthesising each line as a
+guide tone. It was removed: it ran at roughly 2.5x realtime while blocking the
+page, and stacked two error sources — a transcriber mishearing notes, then an
+assignment putting them in the wrong section. [Riffscribe](https://riffscribe.6x7.gr)
+does transcription properly, with a score to check it against.

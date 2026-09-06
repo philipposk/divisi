@@ -1,6 +1,6 @@
 "use client";
 
-import { RANGES, type VoiceId } from "@/lib/satb";
+import { RANGES, type VoiceId } from "@/lib/voices";
 
 export type MixMode = "predominant" | "solo" | "balanced" | "split";
 

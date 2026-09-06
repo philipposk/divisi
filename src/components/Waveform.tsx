@@ -109,7 +109,11 @@ export default function Waveform({
   }, []);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try {
+      (e.target as Element).setPointerCapture(e.pointerId);
+    } catch {
+      // some pointers cannot be captured; dragging still works without it
+    }
     const t = timeAt(e.clientX);
     setDrag({ x0: e.clientX, t0: t, t1: t });
   };

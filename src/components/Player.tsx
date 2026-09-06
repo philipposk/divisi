@@ -24,9 +24,7 @@ import {
   type Bookmark,
   type LoadedProject,
 } from "@/lib/project";
-import { ALL_VOICES, RANGES, guessVoices, splitVoices, type VoiceId } from "@/lib/satb";
-import { renderLine } from "@/lib/synth";
-import { transcribe } from "@/lib/transcribe";
+import { ALL_VOICES, RANGES, type VoiceId } from "@/lib/voices";
 
 interface Props {
   project: LoadedProject;
@@ -37,7 +35,6 @@ interface Loaded {
   original: Float32Array;
   parts: Partial<Record<VoiceId, Float32Array>>;
   accompaniment: Float32Array | null;
-  guides: Partial<Record<VoiceId, Float32Array>>;
   sampleRate: number;
   duration: number;
 }
@@ -47,16 +44,18 @@ type Stage =
   | { kind: "ready" }
   | { kind: "error"; message: string };
 
+/** Everything the kitchen writes is 44.1 kHz, so decode and playback agree. */
+const SAMPLE_RATE = 44100;
+
+
 const card = "glass rounded-2xl p-5 sm:p-6";
 const heading = "mb-4 text-xs uppercase tracking-wide text-[var(--fg-muted)]";
 
 export default function Player({ project, onClose }: Props) {
   const manifest = project.manifest;
 
-  const ctxRef = useRef<AudioContext | null>(null);
   const playerRef = useRef<PracticePlayer | null>(null);
   const audioRef = useRef<Loaded | null>(null);
-  const sourceBufferRef = useRef<AudioBuffer | null>(null);
 
   const [stage, setStage] = useState<Stage>({ kind: "loading", message: "Opening the recording" });
   const [state, setState] = useState<PlayerState | null>(null);
@@ -65,12 +64,6 @@ export default function Player({ project, onClose }: Props) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(manifest.bookmarks ?? []);
   const [myPart, setMyPart] = useState<VoiceId | null>(null);
   const [mixMode, setMixMode] = useState<MixMode>("predominant");
-  const [finding, setFinding] = useState<{ active: boolean; message: string; percent: number }>({
-    active: false,
-    message: "",
-    percent: 0,
-  });
-  const [findingNote, setFindingNote] = useState<string | null>(null);
 
   /* ---------------------------------------------------------------- */
   /* build the audio graph                                             */
@@ -78,11 +71,10 @@ export default function Player({ project, onClose }: Props) {
 
   const buildPlayer = useCallback(async () => {
     const loaded = audioRef.current;
-    const ctx = ctxRef.current;
-    if (!loaded || !ctx) return;
+    if (!loaded) return;
 
     const previous = playerRef.current?.state;
-    playerRef.current?.destroy();
+    void playerRef.current?.destroy();
 
     const stems: StemInput[] = [
       {
@@ -106,17 +98,6 @@ export default function Player({ project, onClose }: Props) {
       });
     }
 
-    for (const v of ALL_VOICES) {
-      const data = loaded.guides[v];
-      if (!data) continue;
-      stems.push({
-        id: `guide-${v}`,
-        label: `${RANGES[v].label} — guide tone`,
-        color: `var(${RANGES[v].colorVar})`,
-        data,
-        gain: 0,
-      });
-    }
 
     if (loaded.accompaniment) {
       stems.push({
@@ -128,7 +109,7 @@ export default function Player({ project, onClose }: Props) {
       });
     }
 
-    const player = await PracticePlayer.create(ctx, stems);
+    const player = await PracticePlayer.create(stems, loaded.sampleRate);
     playerRef.current = player;
     player.subscribe((s) => {
       setState(s);
@@ -136,19 +117,19 @@ export default function Player({ project, onClose }: Props) {
     });
 
     if (previous) {
-      player.setRate(previous.rate);
-      player.setSemitones(previous.semitones);
-      if (previous.loop) player.setLoop(previous.loop[0], previous.loop[1]);
-      player.seek(previous.position);
+      await player.setRate(previous.rate);
+      await player.setSemitones(previous.semitones);
+      if (previous.loop) await player.setLoop(previous.loop[0], previous.loop[1]);
+      await player.seek(previous.position);
     } else {
       const saved = loadSession(manifest.slug);
-      if (saved.rate) player.setRate(saved.rate);
-      if (saved.semitones) player.setSemitones(saved.semitones);
-      if (saved.loop) player.setLoop(saved.loop[0], saved.loop[1]);
+      if (saved.rate) await player.setRate(saved.rate);
+      if (saved.semitones) await player.setSemitones(saved.semitones);
+      if (saved.loop) await player.setLoop(saved.loop[0], saved.loop[1]);
       // reopening a piece you played to the end should not leave you parked on
       // the last frame with a play button that appears to do nothing
       if (saved.position && saved.position < player.state.duration - 2) {
-        player.seek(saved.position);
+        await player.seek(saved.position);
       }
       if (saved.bookmarks?.length) setBookmarks(saved.bookmarks);
       if (saved.myPart) setMyPart(saved.myPart);
@@ -165,8 +146,10 @@ export default function Player({ project, onClose }: Props) {
 
     (async () => {
       try {
-        const ctx = new AudioContext();
-        ctxRef.current = ctx;
+        // decoding needs a context but not a running one, and an offline context
+        // pins the sample rate so the kitchen's 44.1 kHz files come back exactly
+        // as they were written
+        const ctx = new OfflineAudioContext(1, 1, SAMPLE_RATE);
 
         const originalFile = await openFile(project, manifest.original);
         if (!originalFile) throw new Error(`Missing ${manifest.original} in that folder.`);
@@ -174,7 +157,6 @@ export default function Player({ project, onClose }: Props) {
         setStage({ kind: "loading", message: "Opening the recording" });
         const originalBuffer = await decodeFile(ctx, originalFile);
         if (cancelled) return;
-        sourceBufferRef.current = originalBuffer;
         const original = downmix(originalBuffer);
 
         const parts: Partial<Record<VoiceId, Float32Array>> = {};
@@ -184,7 +166,7 @@ export default function Player({ project, onClose }: Props) {
           setStage({ kind: "loading", message: `Opening the ${p.label.toLowerCase()} track` });
           const buf = await decodeFile(ctx, file);
           if (cancelled) return;
-          parts[p.id] = downmix(buf);
+          parts[p.id as VoiceId] = downmix(buf);
         }
 
         let accompaniment: Float32Array | null = null;
@@ -200,8 +182,7 @@ export default function Player({ project, onClose }: Props) {
           original,
           parts,
           accompaniment,
-          guides: {},
-          sampleRate: ctx.sampleRate,
+          sampleRate: SAMPLE_RATE,
           duration: originalBuffer.duration,
         };
 
@@ -220,10 +201,8 @@ export default function Player({ project, onClose }: Props) {
 
     return () => {
       cancelled = true;
-      playerRef.current?.destroy();
+      void playerRef.current?.destroy();
       playerRef.current = null;
-      ctxRef.current?.close().catch(() => {});
-      ctxRef.current = null;
     };
     // rebuilding on every buildPlayer identity change would re-decode the audio
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,13 +212,10 @@ export default function Player({ project, onClose }: Props) {
   /* mix presets                                                       */
   /* ---------------------------------------------------------------- */
 
-  const availableParts = useMemo(() => {
-    const loaded = audioRef.current;
-    const ids = new Set<VoiceId>();
-    for (const p of manifest.parts) ids.add(p.id);
-    if (loaded) for (const v of ALL_VOICES) if (loaded.guides[v]) ids.add(v);
-    return ALL_VOICES.filter((v) => ids.has(v));
-  }, [manifest.parts, channels]);
+  const availableParts = useMemo(
+    () => ALL_VOICES.filter((v) => manifest.parts.some((p) => p.id === v)),
+    [manifest.parts]
+  );
 
   const applyMix = useCallback((part: VoiceId | null, mode: MixMode) => {
     const player = playerRef.current;
@@ -247,8 +223,7 @@ export default function Player({ project, onClose }: Props) {
     if (!player || !loaded) return;
 
     player.setSolo(null);
-    const hasStem = (v: VoiceId) => !!loaded.parts[v];
-    const mineIds = part ? [hasStem(part) ? part : null, `guide-${part}`].filter(Boolean) : [];
+    const mineIds: string[] = part && loaded.parts[part] ? [part] : [];
 
     for (const ch of player.mixer) {
       const mine = mineIds.includes(ch.id);
@@ -262,18 +237,15 @@ export default function Player({ project, onClose }: Props) {
       } else if (mode === "predominant") {
         // the recording keeps playing underneath, which is what buries any
         // separation artefacts in your own line
-        volume = isOriginal ? 0.5 : mine ? (ch.id.startsWith("guide-") ? 0.5 : 1.4) : 0;
+        volume = isOriginal ? 0.5 : mine ? 1.4 : 0;
         if (isAccomp) volume = 0.5;
       } else if (mode === "solo") {
-        volume = mine ? (ch.id.startsWith("guide-") ? 0.9 : 1.2) : 0;
+        volume = mine ? 1.2 : 0;
       } else if (mode === "split") {
         volume = isOriginal ? 1 : mine ? 1.3 : 0;
         pan = isOriginal ? 0.9 : mine ? -0.9 : 0;
       }
 
-      // with a real separated stem the guide tone is a distraction, so it only
-      // comes up when there is nothing better
-      if (ch.id.startsWith("guide-") && part && hasStem(part) && mode !== "solo") volume = 0;
 
       player.setVolume(ch.id, volume);
       player.setPan(ch.id, pan);
@@ -323,10 +295,10 @@ export default function Player({ project, onClose }: Props) {
           void player.toggle();
           break;
         case "ArrowLeft":
-          player.nudge(e.shiftKey ? -1 : -5);
+          void player.nudge(e.shiftKey ? -1 : -5);
           break;
         case "ArrowRight":
-          player.nudge(e.shiftKey ? 1 : 5);
+          void player.nudge(e.shiftKey ? 1 : 5);
           break;
         case "[":
           setLoopEdge(0);
@@ -336,7 +308,7 @@ export default function Player({ project, onClose }: Props) {
           break;
         case "l":
         case "L":
-          player.clearLoop();
+          void player.clearLoop();
           break;
         case "1":
         case "2":
@@ -366,61 +338,9 @@ export default function Player({ project, onClose }: Props) {
     if (next[1] - next[0] < 0.25) {
       // setting B before A is almost always a mis-tap, so extend rather than
       // silently doing nothing
-      player.setLoop(Math.min(next[0], next[1]), Math.min(next[0], next[1]) + 2);
+      void player.setLoop(Math.min(next[0], next[1]), Math.min(next[0], next[1]) + 2);
     } else {
-      player.setLoop(next[0], next[1]);
-    }
-  };
-
-  const findParts = async () => {
-    const loaded = audioRef.current;
-    const buffer = sourceBufferRef.current;
-    const player = playerRef.current;
-    if (!loaded || !buffer || !player) return;
-
-    playerRef.current?.pause();
-    setFinding({ active: true, message: "Listening for the notes", percent: 0 });
-    setFindingNote(null);
-
-    try {
-      const notes = await transcribe(buffer, {
-        onProgress: (p) =>
-          setFinding({ active: true, message: "Listening for the notes", percent: p * 0.7 }),
-      });
-
-      setFinding({ active: true, message: "Working out who sang what", percent: 0.75 });
-      await new Promise((r) => setTimeout(r, 0));
-
-      const voices = manifest.parts.length
-        ? manifest.parts.map((p) => p.id)
-        : guessVoices(notes);
-      const result = splitVoices(notes, { voices });
-
-      setFinding({ active: true, message: "Making the guide tones", percent: 0.9 });
-      await new Promise((r) => setTimeout(r, 0));
-
-      const guides: Partial<Record<VoiceId, Float32Array>> = {};
-      for (const line of result.lines) {
-        if (!line.notes.length) continue;
-        guides[line.id] = renderLine(line.notes, loaded.duration, loaded.sampleRate);
-      }
-      loaded.guides = guides;
-
-      await buildPlayer();
-      setMyPart((cur) => cur ?? result.lines.find((l) => l.notes.length)?.id ?? null);
-
-      const found = result.lines.filter((l) => l.notes.length).map((l) => l.label);
-      setFindingNote(
-        `Found ${found.length} line${found.length === 1 ? "" : "s"} (${found.join(", ")}). ` +
-          `Roughly ${Math.round(result.certainty * 100)}% of the notes went somewhere confident — ` +
-          `treat it as a sketch, not a score.`
-      );
-    } catch (e) {
-      // the message alone is rarely enough to debug a tfjs failure
-      console.error("[divisi] part finding failed", e);
-      setFindingNote(`Could not work out the parts: ${e instanceof Error ? e.message : e}`);
-    } finally {
-      setFinding({ active: false, message: "", percent: 0 });
+      void player.setLoop(next[0], next[1]);
     }
   };
 
@@ -432,7 +352,6 @@ export default function Player({ project, onClose }: Props) {
     const byId = new Map<string, Float32Array>([["original", loaded.original]]);
     for (const v of ALL_VOICES) {
       if (loaded.parts[v]) byId.set(v, loaded.parts[v]!);
-      if (loaded.guides[v]) byId.set(`guide-${v}`, loaded.guides[v]!);
     }
     if (loaded.accompaniment) byId.set("accompaniment", loaded.accompaniment);
 
@@ -473,7 +392,6 @@ export default function Player({ project, onClose }: Props) {
   }
 
   const hasSeparatedParts = manifest.parts.length > 0;
-  const hasGuides = ALL_VOICES.some((v) => audioRef.current?.guides[v]);
   const hasReadyMixes = manifest.mixes.length > 0;
 
   return (
@@ -501,9 +419,9 @@ export default function Player({ project, onClose }: Props) {
         position={state.position}
         loop={state.loop}
         bookmarks={bookmarks}
-        onSeek={(t) => playerRef.current?.seek(t)}
+        onSeek={(t) => void playerRef.current?.seek(t)}
         onLoopChange={(l) =>
-          l ? playerRef.current?.setLoop(l[0], l[1]) : playerRef.current?.clearLoop()
+          void (l ? playerRef.current?.setLoop(l[0], l[1]) : playerRef.current?.clearLoop())
         }
       />
 
@@ -514,7 +432,7 @@ export default function Player({ project, onClose }: Props) {
           duration={state.duration}
           loop={state.loop}
           onToggle={() => void playerRef.current?.toggle()}
-          onNudge={(s) => playerRef.current?.nudge(s)}
+          onNudge={(s) => void playerRef.current?.nudge(s)}
           onSetLoopEdge={setLoopEdge}
           onNudgeLoopEdge={(edge, delta) => {
             const player = playerRef.current;
@@ -522,25 +440,33 @@ export default function Player({ project, onClose }: Props) {
             const cur = player.state.loop ?? [0, player.state.duration];
             const next: [number, number] = [...cur];
             next[edge] += delta;
-            player.setLoop(next[0], next[1]);
+            void player.setLoop(next[0], next[1]);
           }}
-          onClearLoop={() => playerRef.current?.clearLoop()}
+          onClearLoop={() => void playerRef.current?.clearLoop()}
           onLoopLastBar={() => {
             const player = playerRef.current;
             if (!player) return;
             const end = player.state.position;
-            player.setLoop(Math.max(0, end - 4), end);
-            player.seek(Math.max(0, end - 4));
+            void player.setLoop(Math.max(0, end - 4), end).then(() => player.seek(Math.max(0, end - 4)));
           }}
         />
       </div>
+
+      {state.rendering !== null && (
+        <div className="glass flex items-center gap-3 rounded-2xl px-5 py-3 text-sm">
+          <span className="pulsing">Re-rendering at the new speed…</span>
+          <span className="text-xs text-[var(--fg-muted)]">
+            done once per speed, then it is instant
+          </span>
+        </div>
+      )}
 
       <div className={card}>
         <SpeedControls
           rate={state.rate}
           semitones={state.semitones}
-          onRate={(r) => playerRef.current?.setRate(r)}
-          onSemitones={(n) => playerRef.current?.setSemitones(n)}
+          onRate={(r) => void playerRef.current?.setRate(r)}
+          onSemitones={(n) => void playerRef.current?.setSemitones(n)}
         />
       </div>
 
@@ -554,33 +480,20 @@ export default function Player({ project, onClose }: Props) {
         />
 
         {!hasSeparatedParts && (
-          <div className="mt-5 border-t border-[var(--border)] pt-5">
-            <p className="text-sm">
-              This recording has not been split yet.{" "}
-              {hasGuides ? "Guide tones are loaded." : "I can have a go at picking out the lines."}
-            </p>
+          <div className="mt-5 border-t border-[var(--border)] pt-5 text-sm">
+            <p>This recording has not been split into parts yet.</p>
             <p className="mt-1 text-xs text-[var(--fg-muted)]">
-              In the browser this listens for the notes and plays each part back as a plain tone —
-              useful for checking an entry, and wrong often enough that you should not trust it over
-              the score. For proper separated voices, run the recording through the kitchen script on
-              a Mac.
+              Everything else here still works — speed, key, looping and marks. To get a track per
+              section, run the recording through the kitchen script on a Mac and open the folder it
+              writes. If what you want is the notes written down rather than the voices separated,{" "}
+              <a
+                href="https://riffscribe.6x7.gr"
+                className="underline decoration-[var(--border-strong)] underline-offset-2 hover:text-[var(--accent)]"
+              >
+                Riffscribe
+              </a>{" "}
+              does that properly.
             </p>
-            <button
-              onClick={findParts}
-              disabled={finding.active}
-              className="mt-3 rounded-xl border border-[var(--border)] px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-50"
-            >
-              {finding.active ? `${finding.message}…` : hasGuides ? "Try again" : "Find the parts"}
-            </button>
-            {finding.active && (
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full bg-[var(--accent)] transition-all"
-                  style={{ width: `${Math.round(finding.percent * 100)}%` }}
-                />
-              </div>
-            )}
-            {findingNote && <p className="mt-3 text-xs text-[var(--fg-muted)]">{findingNote}</p>}
           </div>
         )}
       </div>
@@ -617,10 +530,9 @@ export default function Player({ project, onClose }: Props) {
             setBookmarks((b) => [...b, { id: `${time}-${label}`, label, time }])
           }
           onRemove={(id) => setBookmarks((b) => b.filter((x) => x.id !== id))}
-          onJump={(t) => playerRef.current?.seek(t)}
+          onJump={(t) => void playerRef.current?.seek(t)}
           onLoopBetween={(a, b) => {
-            playerRef.current?.setLoop(a, b);
-            playerRef.current?.seek(a);
+            void playerRef.current?.setLoop(a, b).then(() => playerRef.current?.seek(a));
           }}
         />
       </div>

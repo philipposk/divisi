@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Copies the Basic Pitch model (audio -> notes) and the tfjs WASM binaries into
-// /public so everything is served from our own origin. No CDN, no cross-origin
-// fetches, and the app keeps working offline once it has been loaded.
+// Copies the untouched Signalsmith Stretch module into /public so it is served
+// from our own origin and reaches the AudioWorklet exactly as published.
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -24,12 +23,6 @@ const files = [
 ];
 
 const dirs = [
-  { from: join(nm, "@spotify/basic-pitch/model"), to: join(pub, "models/basic-pitch") },
-  {
-    from: join(nm, "@tensorflow/tfjs-backend-wasm/dist"),
-    to: join(pub, "tfjs-wasm"),
-    only: (f) => f.endsWith(".wasm"),
-  },
 ];
 
 for (const job of dirs) {

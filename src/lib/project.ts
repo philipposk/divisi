@@ -8,7 +8,7 @@
  * download the folder, then open it.
  */
 
-import type { VoiceId } from "./satb";
+import type { VoiceId } from "./voices";
 
 export interface ProjectPart {
   id: VoiceId;
@@ -91,7 +91,7 @@ const slugify = (text: string) =>
  *
  * A kitchen folder loads exactly as it was built. Loose audio files still work:
  * they become a manifest with no parts, so the transport, slow-down and looping
- * all function immediately and the part-finder can fill in the rest.
+ * all function immediately.
  */
 export async function readProject(input: File[]): Promise<LoadedProject> {
   const root = commonRoot(input);

@@ -56,9 +56,6 @@ from the kitchen, or any audio file.
 - **Mixer** — volume, mute, solo and pan per voice.
 - **Four presets** — my part on top / my part alone / whole choir / split ears
   (your line left, the choir right).
-- **Find the parts** — with no kitchen folder, the browser transcribes the
-  recording and plays each line back as a plain tone. Useful for checking an
-  entry; wrong often enough that you should not trust it over the score.
 - **Download** the current mix as MP3, or every ready-made track as a zip.
 
 Keyboard: `space` play · `←` `→` skip 5 s (shift for 1 s) · `[` `]` set loop ·
@@ -66,6 +63,10 @@ Keyboard: `space` play · `←` `→` skip 5 s (shift for 1 s) · `[` `]` set lo
 
 Nothing is uploaded. Every file is read straight off the machine, and the app is
 a static export, so it runs just as happily from a folder on a laptop.
+
+Divisi deliberately does not transcribe. If you want the notes written down —
+notation, tab, a play-along score — [Riffscribe](https://riffscribe.6x7.gr) does
+that properly, and shares this player's lineage.
 
 ### Sharing a piece by link
 
@@ -123,25 +124,27 @@ recording ──▶ vocals model ──▶ SATB model ──▶ ffmpeg mixes ─
                                               one channel per stem
 ```
 
-The player puts every stem into a **single** `signalsmith-stretch` node as its
-own output channel. One node means one clock, so parts cannot drift apart at any
-speed, and rate / transpose / loop apply to everything at once. It fans out
-through a channel splitter into a gain and a panner per stem — that is the
-mixer.
+Speed and key changes are rendered **offline**: the whole piece is
+time-stretched ahead of time into one multichannel AudioBuffer — a channel per
+stem — and played back with an ordinary buffer source. One buffer means one
+clock, so the parts cannot drift apart at any speed, and it is rendered once per
+speed and cached. At 100% with no transpose nothing is rendered at all, so play
+is instant.
 
-With no kitchen folder, the browser path is Basic Pitch for the notes, then
-`src/lib/satb.ts` to decide who sang what: cut at every onset *and* offset, and
-beam-search across the slices scoring pitch proximity, range fit, time gaps and
-a heavy penalty for voices crossing.
+Running the stretcher *live* in an AudioWorklet was the first design and was
+abandoned: it comes up producing silence and never advancing, depending on how
+and when the AudioContext was created, and once wedged it reports a negative
+position forever. Riffscribe hit the same wall and reached the same conclusion.
+
+Playback fans out through a channel splitter into a gain and a panner per stem —
+that is the mixer.
 
 ## Layout
 
 ```
-src/lib/player.ts      the stretch node and mixer
-src/lib/satb.ts        note list -> one line per voice
-src/lib/transcribe.ts  Basic Pitch
-src/lib/synth.ts       guide tones
-src/lib/dsp.ts         FFT and harmonic masking
+src/lib/player.ts      offline render, transport and mixer
+src/lib/voices.ts      the four voice groups and their ranges
+src/lib/project.ts     reading a kitchen folder, from disk or a URL
 kitchen/run.py         the CLI
 kitchen/separate.py    model wrangling
 kitchen/mixes.py       ffmpeg
