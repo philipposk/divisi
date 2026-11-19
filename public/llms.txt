@@ -1,0 +1,7 @@
+# Divisi
+
+> Split a choir recording into soprano, alto, tenor and bass practice tracks. Slow it down without changing the pitch, loop the hard bar, hear your own line.
+
+- [Divisi — practice tracks for choirs](https://divisi.6x7.gr/)
+- [Sitemap](https://divisi.6x7.gr/sitemap.xml)
+- Made by [6x7](https://6x7.gr/). [All 6x7 apps](https://portfolio.6x7.gr/)
